@@ -316,6 +316,7 @@ impl VirtualMachine {
                     }
 
                     0x0004 => {
+                        // Opcode 8XY4: Adds VY to VX. An overflow flag is set if VX + VY > 255
                         let X = (self.opcode & 0x0F00) >> 8;
                         let VX = self.V[X as usize] as u16; 
                         let Y = (self.opcode & 0x00F0) >> 4;
@@ -327,6 +328,35 @@ impl VirtualMachine {
                             self.V[0xF as usize] = 0;
                         }
                         self.V[X as usize] = (sum & 0xFF) as u8;
+                        self.pc += 2;
+                    }
+
+                    0x0005 => {
+                        // Opcode 8XY5: Subtracts VY from VX. 
+                        // VF is set when there's been a borrow.
+                        let X = (self.opcode & 0x0F00) >> 8;
+                        let VX = self.V[X as usize] as u16;
+                        let Y = (self.opcode & 0x00F0) >> 4;
+                        let VY = self.V[Y as usize] as u16;
+                        // Set the borrow flag
+                        self.V[0xF as usize] = if VY > VX { 1 } else { 0 };
+
+                        self.V[X as usize] -= VY as u8;
+                        self.pc += 2;
+                    }
+
+                    0x0006 => {
+                        // Opcode 8XY6: Shifts VX right by one (div by 2).
+                        // If the least-significant bit of VX is 1, then VF is set to 1, otherwise 0.
+                        let X = (self.opcode & 0x0F00) >> 8;
+                        let VX = self.V[X as usize];
+                        // Save LSB in VF
+                        self.V[0xF as usize] = VX & 0x1;
+                        self.V[X as usize] >>= 1;
+                    }
+
+                    0x0007 => {
+                        // Opcode 8XY7:
                     }
 
                     op @ _ => {
