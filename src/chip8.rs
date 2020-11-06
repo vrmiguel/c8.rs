@@ -132,19 +132,20 @@ impl VirtualMachine {
     }
 
     #[allow(non_snake_case)]
-    // Returns the current values of X and VX
+    /// Returns the current values of X and VX
     fn vx(&mut self) -> (u8, u8) {
         let X = (self.opcode & 0x0F00) >> 8;
         (X as u8, self.V[X as usize])
     }
 
     #[allow(non_snake_case)]
-    // Returns the current values of Y and VY
+    /// Returns the current values of Y and VY
     fn vy(&mut self) -> (u8, u8) {
         let Y = (self.opcode & 0x00F0) >> 4;
         (Y as u8, self.V[Y as usize])
     }
 
+    /// Returns both the current VX and the current VY
     fn vx_vy (&mut self) -> ((u8, u8), (u8, u8)) {
         (self.vx(), self.vy())
     }
@@ -152,9 +153,10 @@ impl VirtualMachine {
     #[allow(non_snake_case)]
     /// Executes a binary operation between VX and VY and attributes it to VX.
     fn vx_vy_bin_op(&mut self, binop: BinOp) {
-        let X = (self.opcode & 0x0F00) >> 8;
-        let Y = (self.opcode & 0x00F0) >> 4;
-        let VY = self.V[Y as usize];
+        // let X = (self.opcode & 0x0F00) >> 8;
+        // let Y = (self.opcode & 0x00F0) >> 4;
+        // let VY = self.V[Y as usize];
+        let ((X, _), (_, VY)) = self.vx_vy();
         match binop {
             BinOp::Attrib => {
                 self.V[X as usize] = VY;
@@ -399,7 +401,14 @@ impl VirtualMachine {
                         self.V[0xF as usize] = if VY > VX { 1 } else { 0 };
 
                         self.V[X as usize] = VY - VX;
-
+                        self.pc += 2;
+                    }
+                    0x000E => {
+                        // Opcode 8XYE: Shifts VX left by one.
+                        // VX receives the value of the most significant bit before the shift.
+                        let (X, VX) = self.vx();
+                        self.V[0xF as usize] = VX & 0x80;
+                        self.V[X as usize] <<= 1;
                     }
 
                     op @ _ => {
