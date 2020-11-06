@@ -26,6 +26,20 @@ enum ComparisonType {
     Inequality,
 }
 
+/// Used by opcodes 8XY0, 8XY1 and 8XY2,
+/// in the context of binary operations between
+/// VX and VY.
+enum BinOp {
+    // VX |= VY
+    Or,
+    // VX &= VY
+    And,
+    // VX ^= VY
+    Xor,
+    // VX = VY
+    Attrib
+}
+
 // Allow non-snake-case naming of variables I and V.
 #[allow(non_snake_case)]
 #[allow(dead_code)]
@@ -73,7 +87,8 @@ pub struct VirtualMachine {
 impl VirtualMachine {
     /// Creates and initializes all the variables within the virtual machine
     pub fn new() -> VirtualMachine {
-        let mut vm = VirtualMachine {
+        let mut vm = VirtualMachine 
+        {
             opcode: 0,
             I: 0,
             sp: 0,
@@ -114,6 +129,60 @@ impl VirtualMachine {
         self.draw_to_screen = true;
     }
 
+    #[allow(non_snake_case)]
+    /// Executes a binary operation between VX and VY and attributes it to VX.
+    fn vx_vy_bin_op(&mut self, binop: BinOp) {
+        let X = (self.opcode & 0x0F00) >> 8;
+        let Y = (self.opcode & 0x00F0) >> 4;
+        let VY = self.V[Y as usize];
+        match binop {
+            BinOp::Attrib => {
+                self.V[X as usize] = VY;
+            }
+
+            BinOp::Xor => {
+                self.V[X as usize] ^= VY;
+            }
+
+            BinOp::And => {
+                self.V[X as usize] &= VY;
+            }
+
+            BinOp::Or => {
+                self.V[X as usize] |= VY;
+            }
+        }
+        self.pc += 2;
+    }
+
+        #[allow(non_snake_case)]
+    /// Skips an instruction dependending on if VX and NN are equal (or unequal). 
+    /// Used by opcodes 3XNN and 4XNN.
+    /// `cmptype` defines whether to skip an instruction if VX == N or if VX != N.
+    fn compare_vx_and_nn(&mut self, cmptype: ComparisonType) {
+        let X = (self.opcode & 0x0F00) >> 8;
+        let VX = self.V[X as usize] as u16;
+        let NN = self.opcode & 0x00FF;
+        if cmptype == ComparisonType::Equality 
+        {
+            // Compare if VX == NN
+            if VX == NN {
+                // VX == NN, so we skip the next instruction
+                self.pc += 4;
+            } else {
+                self.pc += 2;
+            }
+        } else {
+            // Compare if VX != NN
+            if VX != NN {
+                // VX != NN, so we skip the next instruction
+                self.pc += 4;
+            } else {
+                self.pc += 2;
+            }
+        }
+    }
+
     fn draw_sprite(&mut self) {
         let x_idx = (self.opcode & 0x0F00) >> 8;
         let y_idx = (self.opcode & 0x00F0) >> 4;
@@ -142,34 +211,6 @@ impl VirtualMachine {
         }
 
         self.draw_to_screen = true;
-    }
-
-    #[allow(non_snake_case)]
-    /// Skips an instruction dependending on if VX and NN are equal (or unequal). 
-    /// Used by opcodes 3XNN and 4XNN.
-    /// `cmptype` defines whether to skip an instruction if VX == N or if VX != N.
-    fn compare_vx_and_nn(&mut self, cmptype: ComparisonType) {
-        let X = (self.opcode & 0x0F00) >> 8;
-        let VX = self.V[X as usize] as u16;
-        let NN = self.opcode & 0x00FF;
-        if cmptype == ComparisonType::Equality 
-        {
-            // Compare if VX == NN
-            if VX == NN {
-                // VX == NN, so we skip the next instruction
-                self.pc += 4;
-            } else {
-                self.pc += 2;
-            }
-        } else {
-            // Compare if VX != NN
-            if VX != NN {
-                // VX != NN, so we skip the next instruction
-                self.pc += 4;
-            } else {
-                self.pc += 2;
-            }
-        }
     }
 
     #[allow(non_snake_case)]
@@ -241,6 +282,41 @@ impl VirtualMachine {
                 let NN = (self.opcode & 0x00FF) as u8;
                 self.V[X as usize] = NN;
                 self.pc += 2;
+            }
+
+            0x7000 => {
+                // Opcode 7XNN: Adds NN to VX.
+                let X  = (self.opcode & 0x0F00) >> 8;
+                let NN = (self.opcode & 0x00FF) as u8;
+                self.V[X as usize] = NN;
+                self.pc += 2;
+            }
+
+            0x8000 => {
+                match self.opcode & 0x000F {
+
+                    0x0000 => {
+                        // Opcode 8XY0: Sets VX to the value of VY
+                        self.vx_vy_bin_op(BinOp::Attrib);
+                    }
+
+                    0x0001 => {
+                        // Opcode 8XY1: Sets VX to (VX | VY)
+                        self.vx_vy_bin_op(BinOp::Or);
+                    }
+
+                    0x0002 => {
+                        self.vx_vy_bin_op(BinOp::And);
+                    }
+
+                    0x0003 => {
+                        self.vx_vy_bin_op(BinOp::Xor);
+                    }
+
+                    op @ _ => {
+                        eprintln!("Unknown opcode [0x8000#04x{}]", op);
+                    }
+                }
             }
 
             0xD000 => {
