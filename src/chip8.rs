@@ -1,3 +1,5 @@
+// TODO: switch definitions of X, Y, VX and VY to calls of .vx(), .vy() or .vx_vy()
+
 /// The fontset for the CHIP-8.
 /// Every character is 4 pixels wide and 5 pixels tall.
 const FONTSET: [u8; 80] = [
@@ -130,6 +132,24 @@ impl VirtualMachine {
     }
 
     #[allow(non_snake_case)]
+    // Returns the current values of X and VX
+    fn vx(&mut self) -> (u8, u8) {
+        let X = (self.opcode & 0x0F00) >> 8;
+        (X as u8, self.V[X as usize])
+    }
+
+    #[allow(non_snake_case)]
+    // Returns the current values of Y and VY
+    fn vy(&mut self) -> (u8, u8) {
+        let Y = (self.opcode & 0x00F0) >> 4;
+        (Y as u8, self.V[Y as usize])
+    }
+
+    fn vx_vy (&mut self) -> ((u8, u8), (u8, u8)) {
+        (self.vx(), self.vy())
+    }
+
+    #[allow(non_snake_case)]
     /// Executes a binary operation between VX and VY and attributes it to VX.
     fn vx_vy_bin_op(&mut self, binop: BinOp) {
         let X = (self.opcode & 0x0F00) >> 8;
@@ -160,9 +180,10 @@ impl VirtualMachine {
     /// Used by opcodes 3XNN and 4XNN.
     /// `cmptype` defines whether to skip an instruction if VX == N or if VX != N.
     fn compare_vx_and_nn(&mut self, cmptype: ComparisonType) {
-        let X = (self.opcode & 0x0F00) >> 8;
-        let VX = self.V[X as usize] as u16;
-        let NN = self.opcode & 0x00FF;
+        // let X = (self.opcode & 0x0F00) >> 8;
+        // let VX = self.V[X as usize] as u16;
+        let (_, VX) = self.vx();
+        let NN = (self.opcode & 0x00FF) as u8;
         if cmptype == ComparisonType::Equality 
         {
             // Compare if VX == NN
@@ -265,10 +286,11 @@ impl VirtualMachine {
 
             0x5000 => {
                 // Opcode 5XY0: Skips the next instruction if VX == VY
-                let X = (self.opcode & 0x0F00) >> 8;
-                let VX = self.V[X as usize] as u16; 
-                let Y = (self.opcode & 0x00F0) >> 4;
-                let VY = self.V[Y as usize] as u16;      
+                // let X = (self.opcode & 0x0F00) >> 8;
+                // let VX = self.V[X as usize] as u16; 
+                // let Y = (self.opcode & 0x00F0) >> 4;
+                // let VY = self.V[Y as usize] as u16;      
+                let ((_, VX), (_, VY)) = self.vx_vy();
                 if VX == VY {
                     self.pc += 4;
                 } else {
@@ -278,7 +300,8 @@ impl VirtualMachine {
 
             0x6000 => {
                 // Opcode 6XNN: sets VX to NN
-                let X  = (self.opcode & 0x0F00) >> 8;
+                // let X  = (self.opcode & 0x0F00) >> 8;
+                let (X, _) = self.vx();
                 let NN = (self.opcode & 0x00FF) as u8;
                 self.V[X as usize] = NN;
                 self.pc += 2;
@@ -286,9 +309,10 @@ impl VirtualMachine {
 
             0x7000 => {
                 // Opcode 7XNN: Adds NN to VX.
-                let X  = (self.opcode & 0x0F00) >> 8;
+                // let X  = (self.opcode & 0x0F00) >> 8;
+                let (X, _) = self.vx();
                 let NN = (self.opcode & 0x00FF) as u8;
-                self.V[X as usize] = NN;
+                self.V[X as usize] += NN;
                 self.pc += 2;
             }
 
@@ -317,11 +341,13 @@ impl VirtualMachine {
 
                     0x0004 => {
                         // Opcode 8XY4: Adds VY to VX. An overflow flag is set if VX + VY > 255
-                        let X = (self.opcode & 0x0F00) >> 8;
-                        let VX = self.V[X as usize] as u16; 
-                        let Y = (self.opcode & 0x00F0) >> 4;
-                        let VY = self.V[Y as usize] as u16;
-                        let sum = VX + VY;
+                        // let X = (self.opcode & 0x0F00) >> 8;
+                        // let VX = self.V[X as usize] as u16; 
+                        // let Y = (self.opcode & 0x00F0) >> 4;
+                        // let VY = self.V[Y as usize] as u16;
+                        
+                        let ((X, VX), (_, VY)) = self.vx_vy();
+                        let sum = (VX + VY) as u16;
                         if sum > 0xFF {
                             self.V[0xF as usize] = 1;
                         } else {
@@ -334,10 +360,11 @@ impl VirtualMachine {
                     0x0005 => {
                         // Opcode 8XY5: Subtracts VY from VX. 
                         // VF is set when there's been a borrow.
-                        let X = (self.opcode & 0x0F00) >> 8;
-                        let VX = self.V[X as usize] as u16;
-                        let Y = (self.opcode & 0x00F0) >> 4;
-                        let VY = self.V[Y as usize] as u16;
+                        // let X = (self.opcode & 0x0F00) >> 8;
+                        // let VX = self.V[X as usize] as u16;
+                        // let Y = (self.opcode & 0x00F0) >> 4;
+                        // let VY = self.V[Y as usize] as u16;
+                        let ((X, VX), (_, VY)) = self.vx_vy();
                         // Set the borrow flag
                         self.V[0xF as usize] = if VY > VX { 1 } else { 0 };
 
@@ -348,15 +375,31 @@ impl VirtualMachine {
                     0x0006 => {
                         // Opcode 8XY6: Shifts VX right by one (div by 2).
                         // If the least-significant bit of VX is 1, then VF is set to 1, otherwise 0.
-                        let X = (self.opcode & 0x0F00) >> 8;
-                        let VX = self.V[X as usize];
+                        // let X = (self.opcode & 0x0F00) >> 8;
+                        // let VX = self.V[X as usize];
+                        let (X, VX) = self.vx();
                         // Save LSB in VF
                         self.V[0xF as usize] = VX & 0x1;
                         self.V[X as usize] >>= 1;
+                        self.pc += 2;
                     }
 
                     0x0007 => {
-                        // Opcode 8XY7:
+                        // Opcode 8XY7: Sets VX to (VY-VX)
+
+                        // So now instead of doing THIS:
+                        // let X = (self.opcode & 0x0F00) >> 8;
+                        // let VX = self.V[X as usize] as u16;
+                        // let Y = (self.opcode & 0x00F0) >> 4;
+                        // let VY = self.V[Y as usize] as u16;
+
+                        // I just do this:
+                        let ((X, VX), (_, VY)) = self.vx_vy();
+                        // Set the borrow flag
+                        self.V[0xF as usize] = if VY > VX { 1 } else { 0 };
+
+                        self.V[X as usize] = VY - VX;
+
                     }
 
                     op @ _ => {
