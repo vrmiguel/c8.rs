@@ -1,4 +1,5 @@
-// TODO: switch definitions of X, Y, VX and VY to calls of .vx(), .vy() or .vx_vy()
+use rand;
+use rand::Rng;
 
 /// The fontset for the CHIP-8.
 /// Every character is 4 pixels wide and 5 pixels tall.
@@ -415,6 +416,36 @@ impl VirtualMachine {
                         eprintln!("Unknown opcode [0x8000#04x{}]", op);
                     }
                 }
+            }
+
+            0x9000 => {
+                // Opcode 9XY0: Skips the next instruction if VX != VY.
+                let ((_, VX), (_, VY)) = self.vx_vy();
+                if VX != VY {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
+            }
+
+            0xA000 => {
+                // Opcode ANNN: Sets I to the address NNN
+                self.I = self.opcode & 0x0FFF;
+                self.pc += 2;
+            }
+
+            0xB000 => {
+                // Opcode BNNN: Jumps to the address NNN + V0
+                self.pc = (self.opcode & 0x0FFF) + (self.V[0] as u16);
+            }
+
+            0xC000 => {
+                // Opcode CXNN: Sets VX to (random_byte &  NN).
+                let mut rng = rand::thread_rng();
+                let (X, _) = self.vx();
+                let NN = (self.opcode & 0x00FF) as u8;
+                self.V[X as usize] = rng.gen::<u8>() & NN;
+                self.pc += 2;
             }
 
             0xD000 => {
