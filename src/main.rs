@@ -1,4 +1,3 @@
-
 mod chip8;
 fn main() {
     // let vm = chip8::VirtualMachine::new();
