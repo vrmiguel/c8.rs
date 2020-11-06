@@ -306,11 +306,27 @@ impl VirtualMachine {
                     }
 
                     0x0002 => {
+                        // Opcode 8XY2: Sets VX to (VX & VY)
                         self.vx_vy_bin_op(BinOp::And);
                     }
 
                     0x0003 => {
+                        // Opcode 8XY3: Sets VX to (VX ^ VY)
                         self.vx_vy_bin_op(BinOp::Xor);
+                    }
+
+                    0x0004 => {
+                        let X = (self.opcode & 0x0F00) >> 8;
+                        let VX = self.V[X as usize] as u16; 
+                        let Y = (self.opcode & 0x00F0) >> 4;
+                        let VY = self.V[Y as usize] as u16;
+                        let sum = VX + VY;
+                        if sum > 0xFF {
+                            self.V[0xF as usize] = 1;
+                        } else {
+                            self.V[0xF as usize] = 0;
+                        }
+                        self.V[X as usize] = (sum & 0xFF) as u8;
                     }
 
                     op @ _ => {
