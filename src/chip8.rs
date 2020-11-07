@@ -1,4 +1,3 @@
-use rand;
 use rand::Rng;
 
 /// The fontset for the CHIP-8.
@@ -40,7 +39,7 @@ enum BinOp {
     // VX ^= VY
     Xor,
     // VX = VY
-    Attrib
+    Attrib,
 }
 
 // Allow non-snake-case naming of variables I and V.
@@ -84,14 +83,20 @@ pub struct VirtualMachine {
     // The CHIP-8 supports 16 keys (hex-based)
     // `keypad` holds the current state of the keypad
     keypad: [u8; 16],
+
+    // General timer register
+    delay_timer: u8,
+
+    // `sound_timer` is the buzzer's timer
+    // The buzzer sounds whenever this timer reaches zero
+    sound_timer: u8
 }
 
 #[allow(dead_code)]
 impl VirtualMachine {
     /// Creates and initializes all the variables within the virtual machine
     pub fn new() -> VirtualMachine {
-        let mut vm = VirtualMachine 
-        {
+        let mut vm = VirtualMachine {
             opcode: 0,
             I: 0,
             sp: 0,
@@ -109,11 +114,15 @@ impl VirtualMachine {
             V: [0; 16],
             // There's nothing to draw to screen yet
             draw_to_screen: false,
+            // Reset timers
+            sound_timer: 0,
+            delay_timer: 0
         };
 
         // Load the fontset into memory
-        for i in 0..=79 {
-            vm.memory[i] = FONTSET[i];
+        for (i, &byte) in FONTSET.iter().enumerate() {
+            // println!("FONTSET[{}] = {}", i, byte);
+            vm.memory[i] = byte;
         }
 
         vm
@@ -147,7 +156,7 @@ impl VirtualMachine {
     }
 
     /// Returns both the current VX and the current VY
-    fn vx_vy (&mut self) -> ((u8, u8), (u8, u8)) {
+    fn vx_vy(&mut self) -> ((u8, u8), (u8, u8)) {
         (self.vx(), self.vy())
     }
 
@@ -178,8 +187,8 @@ impl VirtualMachine {
         self.pc += 2;
     }
 
-        #[allow(non_snake_case)]
-    /// Skips an instruction dependending on if VX and NN are equal (or unequal). 
+    #[allow(non_snake_case)]
+    /// Skips an instruction dependending on if VX and NN are equal (or unequal).
     /// Used by opcodes 3XNN and 4XNN.
     /// `cmptype` defines whether to skip an instruction if VX == N or if VX != N.
     fn compare_vx_and_nn(&mut self, cmptype: ComparisonType) {
@@ -187,8 +196,7 @@ impl VirtualMachine {
         // let VX = self.V[X as usize] as u16;
         let (_, VX) = self.vx();
         let NN = (self.opcode & 0x00FF) as u8;
-        if cmptype == ComparisonType::Equality 
-        {
+        if cmptype == ComparisonType::Equality {
             // Compare if VX == NN
             if VX == NN {
                 // VX == NN, so we skip the next instruction
@@ -208,10 +216,14 @@ impl VirtualMachine {
     }
 
     fn draw_sprite(&mut self) {
-        let x_idx = (self.opcode & 0x0F00) >> 8;
-        let y_idx = (self.opcode & 0x00F0) >> 4;
-        let x = self.V[x_idx as usize];
-        let y = self.V[y_idx as usize];
+        // let x_idx = (self.opcode & 0x0F00) >> 8;
+        // let y_idx = (self.opcode & 0x00F0) >> 4;
+        // let x = self.V[x_idx as usize];
+        // let y = self.V[y_idx as usize];
+
+        // x := The contents of VX, where X is specified by the current opcode
+        // y := The contents of VY, where Y is specified by the current opcode
+        let ((_, x), (_, y)) = self.vx_vy();
 
         // The height of the sprite
         let height = self.opcode & 0x000F;
@@ -290,9 +302,9 @@ impl VirtualMachine {
             0x5000 => {
                 // Opcode 5XY0: Skips the next instruction if VX == VY
                 // let X = (self.opcode & 0x0F00) >> 8;
-                // let VX = self.V[X as usize] as u16; 
+                // let VX = self.V[X as usize] as u16;
                 // let Y = (self.opcode & 0x00F0) >> 4;
-                // let VY = self.V[Y as usize] as u16;      
+                // let VY = self.V[Y as usize] as u16;
                 let ((_, VX), (_, VY)) = self.vx_vy();
                 if VX == VY {
                     self.pc += 4;
@@ -321,7 +333,6 @@ impl VirtualMachine {
 
             0x8000 => {
                 match self.opcode & 0x000F {
-
                     0x0000 => {
                         // Opcode 8XY0: Sets VX to the value of VY
                         self.vx_vy_bin_op(BinOp::Attrib);
@@ -345,10 +356,10 @@ impl VirtualMachine {
                     0x0004 => {
                         // Opcode 8XY4: Adds VY to VX. An overflow flag is set if VX + VY > 255
                         // let X = (self.opcode & 0x0F00) >> 8;
-                        // let VX = self.V[X as usize] as u16; 
+                        // let VX = self.V[X as usize] as u16;
                         // let Y = (self.opcode & 0x00F0) >> 4;
                         // let VY = self.V[Y as usize] as u16;
-                        
+
                         let ((X, VX), (_, VY)) = self.vx_vy();
                         let sum = (VX + VY) as u16;
                         if sum > 0xFF {
@@ -361,7 +372,7 @@ impl VirtualMachine {
                     }
 
                     0x0005 => {
-                        // Opcode 8XY5: Subtracts VY from VX. 
+                        // Opcode 8XY5: Subtracts VY from VX.
                         // VF is set when there's been a borrow.
                         // let X = (self.opcode & 0x0F00) >> 8;
                         // let VX = self.V[X as usize] as u16;
@@ -456,6 +467,75 @@ impl VirtualMachine {
                 the sprite is drawn, and to 0 if that doesn’t happen. */
                 self.draw_sprite();
                 self.pc += 2;
+            }
+
+            // Testing opcodes starting with EX___
+            0xE000 => {
+                match self.opcode & 0x00FF {
+
+                    0x009E => {
+                        // Opcode EX9E: Skips the next instruction if the key
+                        // stored in VX is pressed
+                        let (_, VX) = self.vx();
+                        if self.keypad[VX as usize] != 0 {
+                            self.pc += 4;
+                        } else {
+                            self.pc += 2;
+                        }
+                    }
+
+                    0x00A1 => {
+                        // Opcode EXA1: Skips the next instruction if the key stored in
+                        // VX is not pressed.
+                        let (_, VX) = self.vx();
+                        if self.keypad[VX as usize] == 0 {
+                            self.pc += 4;
+                        } else {
+                            self.pc += 2;
+                        }
+                    }
+                    op => {
+                        eprintln!("Unknown opcode EX#04x{}", op);
+                    }
+                }
+            }
+
+            // Testing opcodes starting with FX___
+            0xF000 => {
+                match self.opcode & 0x00FF {
+
+                    0x0007 => {
+                        // Opcode FX07: Sets VX to the value of the delay timer
+                        let (X, _) = self.vx();
+                        self.V[X as usize] = self.delay_timer;
+                        self.pc += 2;
+                    }
+
+                    0x000A => {
+                        // Opcode FX0A: Wait for a key press, store the value of the key in Vx.
+                        let mut key_was_pressed = false;
+                        for i in 0..16 {
+                            if self.keypad[i as usize] != 0 {
+                                let (X, _) = self.vx();
+                                self.V[X as usize] = i;
+                                key_was_pressed = true;
+                                // TODO: break here?
+                            }
+                        }
+
+                        if key_was_pressed {
+                            self.pc += 2;
+                        } else {
+                            // A key was not pressed, so we try this operation again
+                            // TODO: use a return here instead.
+                            self.pc -= 2;
+                        }
+                    }
+
+                    op => {
+                        eprintln!("Unknown opcode FX#04x{}", op);
+                    }
+                }
             }
 
             op @ _ => {
