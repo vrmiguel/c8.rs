@@ -532,6 +532,88 @@ impl VirtualMachine {
                         }
                     }
 
+                    0x0015 => {
+                        // Opcode FX15: Set the delay timer to VX
+                        let (_, VX) = self.vx();
+                        self.delay_timer = VX;
+                        self.pc += 2;
+                    }
+
+                    0x0018 => {
+                        // Opcode FX18: Set the sound timer to VX
+                        let (_, VX) = self.vx();
+                        self.sound_timer = VX;
+                        self.pc += 2;
+                    }
+
+                    0x001E => {
+                        // Opcode FX1E: Adds VX to I.
+                        // If the sum causes overflow, VF is set to one.
+                        // If not, VF is set to zero.
+                        let (_, VX) = self.vx();
+                        self.V[0xF as usize] = if self.I + (VX as u16) > 0xFFF 
+                                               { 1 } else { 0 };
+                        self.I  += VX as u16;
+                        self.pc += 2;
+                    }
+
+                    0x0029 => {
+                        // Opcode FX29: Sets I to the location of the sprite for the character
+                        // in VX.
+                        let (_, VX) = self.vx();
+                        // TODO: Verify if the fonts must start getting loaded from 0x50.
+                        self.I   = (VX as u16) * 0x5;
+                        self.pc += 2; 
+                    }
+
+                    0x0033 => {
+                        // Opcode FX33: Stores the BCD representation of VX in memory locations
+                        // I, I+1 and I+2.
+                        // The hundreds digit will be stored at I
+                        // The tens digit will be stored at I+1
+                        // And the ones digit stored at I+2 
+                        let I = self.I;
+                        let (_, VX) = self.vx();
+                        let mut value = VX;
+                        // We'll place the values in reverse order
+                        // Ones place
+                        self.memory[(I+2) as usize] = value % 10;
+                        value /= 10;
+
+                        // Tens place
+                        self.memory[(I+1) as usize] = value % 10;
+                        value /= 10;
+
+                        // Hundreds place
+                        self.memory[I as usize] = value % 10;
+
+                        self.pc += 2;
+                    }
+
+                    0x0055 => {
+                        // Opcode FX55: Stores the value of all registers, V0, V1, ..., VX
+                        // on the memory, starting at location I.
+                        let (X, _) = self.vx();
+                        let I = self.I as u8;
+                        for i in 0..=X {
+                            self.memory[(I+i) as usize] = self.V[i as usize];
+                        }
+                        // TODO (quirk?): do I += X+1 ?
+                        self.pc += 2;
+                    }
+
+                    0x0065 => {
+                        // Opcode FX65: Sets V0, V1, ... Vx to the values in memory, starting
+                        // at location I.
+                        let (X, _) = self.vx();
+                        let I = self.I as u8;
+                        for i in 0..=X {
+                            self.V[i as usize] = self.memory[(I + i) as usize];
+                        }
+                        // TODO: do I += X+1 ?
+                        self.pc += 2;
+                    }
+
                     op => {
                         eprintln!("Unknown opcode FX#04x{}", op);
                     }
@@ -541,6 +623,17 @@ impl VirtualMachine {
             op @ _ => {
                 eprintln!("Unknown opcode #08x{}", op);
             }
+        }
+
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+
+        if self.sound_timer > 0 {
+            if self.sound_timer == 1 {
+                // Buzz!
+            }
+            self.sound_timer -= 1;
         }
     }
 }
