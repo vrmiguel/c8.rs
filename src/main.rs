@@ -1,8 +1,21 @@
 mod chip8;
 mod cli;
+mod rom;
 
 fn main() {
-	let _cfg = cli::Config::new();
-    let _vm = chip8::VirtualMachine::new();
-    // let s: [u8; 16] = [0, ..16];
+	let cfg = cli::Config::new();
+    // let _vm = chip8::VirtualMachine::new();
+    if let Err(err) = cfg {
+        eprintln!("Error: {}",  err);
+        return;
+    }
+    let cfg = cfg.unwrap();
+    let cart = rom::Cartridge::new(cfg.filename.clone());
+    if let Err(err) = cart {
+        eprintln!("Error: {}", err);
+        return;
+    }
+    println!("{:?}", cfg);
+    let cart = cart.unwrap();
+    println!("{}", cart.size);
 }

@@ -4,10 +4,10 @@ use std::io::{Error, ErrorKind};
 
 #[derive(Debug)]
 pub struct Config {
-	scale: u8,
-	quirks: bool,
-	delay: u8,
-	filename: String
+	pub scale: u8,
+	pub quirks: bool,
+	pub delay: u8,
+	pub filename: String
 }
 
 impl Config {
@@ -51,14 +51,14 @@ impl Config {
 		let cycle_delay = matches.value_of("delay").unwrap_or("1");
 		let cycle_delay = cycle_delay.parse::<u8>();
 		if cycle_delay.is_err() {
-			return Err(Error::new(ErrorKind::Other, "Error: invalid argument passed on to -d/--delay."));
+			return Err(Error::new(ErrorKind::Other, "invalid argument passed on to -d/--delay."));
 		}
 		let cycle_delay = cycle_delay.unwrap();
 
 		let scale_factor = matches.value_of("scale").unwrap_or("5");
 		let scale_factor = scale_factor.parse::<u8>();
 		if scale_factor.is_err() {
-			return Err(Error::new(ErrorKind::Other, "Error: invalid argument passed on to -s/--scale."));
+			return Err(Error::new(ErrorKind::Other, "invalid argument passed on to -s/--scale."));
 		}
 		let scale_factor = scale_factor.unwrap();
 
