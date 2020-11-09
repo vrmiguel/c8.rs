@@ -7,7 +7,8 @@ pub struct Config {
 	pub scale: u8,
 	pub quirks: bool,
 	pub delay: u8,
-	pub filename: String
+	pub filename: String,
+	// pub verbose: bool
 }
 
 impl Config {
@@ -43,6 +44,11 @@ impl Config {
 					.long("delay")
 					.help("The time between cycles, in milliseconds. Usually between 0 and 10.")
 					.value_name("DELAY"))
+			// .arg(
+			// 	Arg::with_name("verbosity")
+			// 		.short("v")
+			// 		.long("verbose")
+			// 		.help("Show additional information when running."))
 			.get_matches();
 
 		// This .unwrap() will always be Ok since filename is a required argument
@@ -61,6 +67,8 @@ impl Config {
 			return Err(Error::new(ErrorKind::Other, "invalid argument passed on to -s/--scale."));
 		}
 		let scale_factor = scale_factor.unwrap();
+
+		// let verbose = matches.
 
 		// TODO: read quirks
 

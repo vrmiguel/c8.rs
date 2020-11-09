@@ -96,7 +96,7 @@ pub struct VirtualMachine {
 
 impl fmt::Display for VirtualMachine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "OP: {:#04x}, PC: {:#04x}, draw_to_screen: {}\n", self.opcode, self.pc, self.draw_to_screen)
+        write!(f, "OP: {:#04x}, PC: {:#04x}, I: {:#04x}\n", self.opcode, self.pc, self.I)
     }
 }
 
@@ -247,8 +247,8 @@ impl VirtualMachine {
                 if pixel & (0x80 >> xline) != 0 {
                     let xpos: u16 = (x + xline) as u16;
                     let ypos: u16 = y as u16 + yline;
+                    // Doing the modulo by (64 * 32) in order to avoid overflow
                     let pos = ((xpos + (ypos * 64)) as usize) % (64 * 32);
-                    // gfx[(x + xline + ((y + yline) * 64)) % (64 * 32)] ^= 1;
                     if self.graphics[pos] {
                         self.V[0xF as usize] = 1;
                     }
@@ -276,13 +276,15 @@ impl VirtualMachine {
                 we must now only compare its last byte. */
                 match self.opcode & 0x000F {
                     0x0000 => {
-                        // Opcode 0x00E0: Clears the screen
+                        p!(:"Opcode 00E0: Clears the screen");
+                        // Opcode 00E0: Clears the screen
                         self.clear_screen();
                         self.pc += 2;
                     }
 
                     0x000E => {
-                        // Opcode 0x00EE: Returns from subroutine
+                        p!(:"Opcode 0EE: Returns from subroutine");
+                        // Opcode 0EE: Returns from subroutine
                         self.sp -= 1;
                         let new_program_counter = self.stack[self.sp as usize];
                         self.pc = new_program_counter as u16 + 2;
@@ -295,11 +297,13 @@ impl VirtualMachine {
             }
 
             0x1000 => {
-                // Opcode 0x1000: Jumps to address NNN
+                p!(:"Opcode 1NNN: Jumps to address NNN");
+                // Opcode 1NNN: Jumps to address NNN
                 self.pc = self.opcode & 0x0FFF;
             }
 
             0x2000 => {
+                p!(:"Opcode 2NNN: Calls subroutine located at NNN");
                 // Opcode 2NNN: Calls subroutine located at NNN
                 // TODO: make sure that `self.pc as u8` can't overflow
                 self.stack[self.sp as usize] = self.pc as u8;
@@ -308,16 +312,19 @@ impl VirtualMachine {
             }
 
             0x3000 => {
+                p!(:"Opcode 3XNN: Skips the next instruction if VX == NN.");
                 // Opcode 3XNN: Skips the next instruction if VX == NN.
                 self.compare_vx_and_nn(ComparisonType::Equality);
             }
 
             0x4000 => {
+                p!(:"Opcode 4XNN: Skips the next instruction if VX != NN.");
                 // Opcode 4XNN: Skips the next instruction if VX != NN.
                 self.compare_vx_and_nn(ComparisonType::Inequality);
             }
 
             0x5000 => {
+                p!(:"Opcode 5XY0: Skips the next instruction if VX == VY");
                 // Opcode 5XY0: Skips the next instruction if VX == VY
                 // let X = (self.opcode & 0x0F00) >> 8;
                 // let VX = self.V[X as usize] as u16;
@@ -332,6 +339,7 @@ impl VirtualMachine {
             }
 
             0x6000 => {
+                p!(:"Opcode 6XNN: sets VX to NN");
                 // Opcode 6XNN: sets VX to NN
                 // let X  = (self.opcode & 0x0F00) >> 8;
                 let (X, _) = self.vx();
@@ -341,37 +349,50 @@ impl VirtualMachine {
             }
 
             0x7000 => {
+                p!(:"Opcode 7XNN: Adds NN to VX.");
                 // Opcode 7XNN: Adds NN to VX.
                 // let X  = (self.opcode & 0x0F00) >> 8;
-                let (X, _) = self.vx();
-                let NN = (self.opcode & 0x00FF) as u8;
-                self.V[X as usize] += NN;
+                let (X, VX) = self.vx();
+                let mut NN = (self.opcode & 0x00FF) as u16;
+                NN = if NN + (VX as u16) > 255 {
+                    // Wrap around if overflown
+                    0
+                } else {
+                    NN                    
+                };
+
+                self.V[X as usize] += NN as u8;
                 self.pc += 2;
             }
 
             0x8000 => {
                 match self.opcode & 0x000F {
                     0x0000 => {
+                        p!(:"Opcode 8XY0: Sets VX to the value of VY");
                         // Opcode 8XY0: Sets VX to the value of VY
                         self.vx_vy_bin_op(BinOp::Attrib);
                     }
 
                     0x0001 => {
+                        p!(:"Opcode 8XY1: Sets VX to (VX | VY)");
                         // Opcode 8XY1: Sets VX to (VX | VY)
                         self.vx_vy_bin_op(BinOp::Or);
                     }
 
                     0x0002 => {
+                        p!(:"Opcode 8XY2: Sets VX to (VX & VY)");
                         // Opcode 8XY2: Sets VX to (VX & VY)
                         self.vx_vy_bin_op(BinOp::And);
                     }
 
                     0x0003 => {
+                        p!(:"Opcode 8XY3: Sets VX to (VX ^ VY)");
                         // Opcode 8XY3: Sets VX to (VX ^ VY)
                         self.vx_vy_bin_op(BinOp::Xor);
                     }
 
                     0x0004 => {
+                        p!(:"Opcode 8XY4: Adds VY to VX.");
                         // Opcode 8XY4: Adds VY to VX. An overflow flag is set if VX + VY > 255
                         // let X = (self.opcode & 0x0F00) >> 8;
                         // let VX = self.V[X as usize] as u16;
@@ -390,6 +411,7 @@ impl VirtualMachine {
                     }
 
                     0x0005 => {
+                        p!(:"Opcode 8XY5: Subtracts VY from VX.");
                         // Opcode 8XY5: Subtracts VY from VX.
                         // VF is set when there's been a borrow.
                         // let X = (self.opcode & 0x0F00) >> 8;
@@ -405,6 +427,7 @@ impl VirtualMachine {
                     }
 
                     0x0006 => {
+                        p!(:"Opcode 8XY6: Shifts VX right by one (div by 2)");
                         // Opcode 8XY6: Shifts VX right by one (div by 2).
                         // If the least-significant bit of VX is 1, then VF is set to 1, otherwise 0.
                         // let X = (self.opcode & 0x0F00) >> 8;
@@ -417,6 +440,7 @@ impl VirtualMachine {
                     }
 
                     0x0007 => {
+                        p!(:"Opcode 8XY7: Sets VX to (VY-VX)");
                         // Opcode 8XY7: Sets VX to (VY-VX)
 
                         // So now instead of doing THIS:
@@ -434,6 +458,7 @@ impl VirtualMachine {
                         self.pc += 2;
                     }
                     0x000E => {
+                        p!(:"Opcode 8XYE: Shifts VX left by one.");
                         // Opcode 8XYE: Shifts VX left by one.
                         // VX receives the value of the most significant bit before the shift.
                         let (X, VX) = self.vx();
@@ -448,6 +473,7 @@ impl VirtualMachine {
             }
 
             0x9000 => {
+                p!(:"Opcode 9XY0: Skips the next instruction if VX != VY.");
                 // Opcode 9XY0: Skips the next instruction if VX != VY.
                 let ((_, VX), (_, VY)) = self.vx_vy();
                 if VX != VY {
@@ -458,17 +484,20 @@ impl VirtualMachine {
             }
 
             0xA000 => {
+                p!(:"Opcode ANNN: Sets I to the address NNN");
                 // Opcode ANNN: Sets I to the address NNN
                 self.I = self.opcode & 0x0FFF;
                 self.pc += 2;
             }
 
             0xB000 => {
+                p!(:"Opcode BNNN: Jumps to the address NNN + V0");
                 // Opcode BNNN: Jumps to the address NNN + V0
                 self.pc = (self.opcode & 0x0FFF) + (self.V[0] as u16);
             }
 
             0xC000 => {
+                p!(:"Opcode CXNN: Sets VX to (random_byte &  NN).");
                 // Opcode CXNN: Sets VX to (random_byte &  NN).
                 let mut rng = rand::thread_rng();
                 let (X, _) = self.vx();
@@ -478,6 +507,7 @@ impl VirtualMachine {
             }
 
             0xD000 => {
+                p!(:"Opcode DXYN: draw sprite at (VX, VY), w=8, h=N");
                 /*  Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels.
                 Each row of 8 pixels is read as bit-coded starting from memory location I.
                 The I value doesn’t change after the execution of this instruction.
@@ -492,6 +522,7 @@ impl VirtualMachine {
                 match self.opcode & 0x00FF {
 
                     0x009E => {
+                        p!(:"Opcode EX9E: Skips the next instruction if the key");
                         // Opcode EX9E: Skips the next instruction if the key
                         // stored in VX is pressed
                         let (_, VX) = self.vx();
@@ -503,6 +534,7 @@ impl VirtualMachine {
                     }
 
                     0x00A1 => {
+                        p!(:"Opcode EXA1: Skips the next instruction if the key stored in");
                         // Opcode EXA1: Skips the next instruction if the key stored in
                         // VX is not pressed.
                         let (_, VX) = self.vx();
@@ -523,6 +555,7 @@ impl VirtualMachine {
                 match self.opcode & 0x00FF {
 
                     0x0007 => {
+                        p!(:"Opcode FX07: Sets VX to the value of the delay timer");
                         // Opcode FX07: Sets VX to the value of the delay timer
                         let (X, _) = self.vx();
                         self.V[X as usize] = self.delay_timer;
@@ -530,6 +563,7 @@ impl VirtualMachine {
                     }
 
                     0x000A => {
+                        p!(:"Opcode FX0A: Wait for a key press, store the value of the key in Vx.");
                         // Opcode FX0A: Wait for a key press, store the value of the key in Vx.
                         let mut key_was_pressed = false;
                         for i in 0..16 {
@@ -545,12 +579,12 @@ impl VirtualMachine {
                             self.pc += 2;
                         } else {
                             // A key was not pressed, so we try this operation again
-                            // TODO: use a return here instead.
-                            self.pc -= 2;
+                            // TODO: make sure timers are not decreases when this case happens?
                         }
                     }
 
                     0x0015 => {
+                        p!(:"Opcode FX15: Set the delay timer to VX");
                         // Opcode FX15: Set the delay timer to VX
                         let (_, VX) = self.vx();
                         self.delay_timer = VX;
@@ -558,6 +592,7 @@ impl VirtualMachine {
                     }
 
                     0x0018 => {
+                        p!(:"Opcode FX18: Set the sound timer to VX");
                         // Opcode FX18: Set the sound timer to VX
                         let (_, VX) = self.vx();
                         self.sound_timer = VX;
@@ -565,6 +600,7 @@ impl VirtualMachine {
                     }
 
                     0x001E => {
+                        p!(:"Opcode FX1E: Adds VX to I.");
                         // Opcode FX1E: Adds VX to I.
                         // If the sum causes overflow, VF is set to one.
                         // If not, VF is set to zero.
@@ -576,6 +612,7 @@ impl VirtualMachine {
                     }
 
                     0x0029 => {
+                        p!(:"Opcode FX29: Sets I to the location of the sprite for the character in VX.");
                         // Opcode FX29: Sets I to the location of the sprite for the character
                         // in VX.
                         let (_, VX) = self.vx();
@@ -585,6 +622,7 @@ impl VirtualMachine {
                     }
 
                     0x0033 => {
+                        p!(:"Opcode FX33: Stores the BCD representation of VX in mem. at I, I+1 and I+2.");
                         // Opcode FX33: Stores the BCD representation of VX in memory locations
                         // I, I+1 and I+2.
                         // The hundreds digit will be stored at I
@@ -609,6 +647,7 @@ impl VirtualMachine {
                     }
 
                     0x0055 => {
+                        p!(:"Opcode FX55: Stores the value of V0..VX on the memory, starting at I.");
                         // Opcode FX55: Stores the value of all registers, V0, V1, ..., VX
                         // on the memory, starting at location I.
                         let (X, _) = self.vx();
@@ -617,10 +656,12 @@ impl VirtualMachine {
                             self.memory[(I+i) as usize] = self.V[i as usize];
                         }
                         // TODO (quirk?): do I += X+1 ?
+                        self.I += (X + 1) as u16;
                         self.pc += 2;
                     }
 
                     0x0065 => {
+                        p!(:"Opcode FX65: Reads V0..VX from memory, starting at I.");
                         // Opcode FX65: Sets V0, V1, ... Vx to the values in memory, starting
                         // at location I.
                         let (X, _) = self.vx();
@@ -628,7 +669,8 @@ impl VirtualMachine {
                         for i in 0..=X {
                             self.V[i as usize] = self.memory[(I + i) as usize];
                         }
-                        // TODO: do I += X+1 ?
+                        // TODO: quirk -- do I += X+1
+                        self.I += (X+1) as u16;
                         self.pc += 2;
                     }
 

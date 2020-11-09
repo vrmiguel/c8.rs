@@ -1,3 +1,4 @@
+#[macro_use] extern crate p_macro;
 mod chip8;
 mod cli;
 mod rom;
