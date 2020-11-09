@@ -4,7 +4,7 @@ mod rom;
 
 fn main() {
 	let cfg = cli::Config::new();
-    // let _vm = chip8::VirtualMachine::new();
+    let mut vm = chip8::VirtualMachine::new();
     if let Err(err) = cfg {
         eprintln!("Error: {}",  err);
         return;
@@ -17,5 +17,11 @@ fn main() {
     }
     println!("{:?}", cfg);
     let cart = cart.unwrap();
+    vm.load_rom(cart);
     println!("{}", cart.size);
+
+    loop {
+    	vm.run_cycle();
+    	println!("{}", vm);
+    }
 }

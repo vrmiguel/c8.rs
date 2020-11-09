@@ -6,7 +6,7 @@ use std::io::{Error, ErrorKind, Read};
 /// reserved by the machine-specific interpreters.
 const MAX_ROM_SIZE: u16 = 4096-512;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Cartridge {
     // The data in the ROM
     pub data: [u8; MAX_ROM_SIZE as usize],

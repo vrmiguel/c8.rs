@@ -1,2 +1,2 @@
-# c8.rs
+# lascaoito (work in progress)
 Yet another CHIP-8 emulator

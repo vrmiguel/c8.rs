@@ -1,3 +1,5 @@
+use crate::rom::Cartridge;
+use std::fmt;
 use rand::Rng;
 
 /// The fontset for the CHIP-8.
@@ -90,6 +92,12 @@ pub struct VirtualMachine {
     // `sound_timer` is the buzzer's timer
     // The buzzer sounds whenever this timer reaches zero
     sound_timer: u8
+}
+
+impl fmt::Display for VirtualMachine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "OP: {:#04x}, PC: {:#04x}, draw_to_screen: {}\n", self.opcode, self.pc, self.draw_to_screen)
+    }
 }
 
 #[allow(dead_code)]
@@ -233,11 +241,14 @@ impl VirtualMachine {
 
         for yline in 0..height {
             // Get the pixel vaue from the memory starting at I
-            let pixel = self.memory[(self.I + yline) as usize];
+            let pixel = self.memory[(self.I + (yline as u16)) as usize];
             // Loop over the 8 bits of the current row
             for xline in 0..8 {
                 if pixel & (0x80 >> xline) != 0 {
-                    let pos = (x + xline + ((y + yline as u8) * 64)) as usize;
+                    let xpos: u16 = (x + xline) as u16;
+                    let ypos: u16 = y as u16 + yline;
+                    let pos = ((xpos + (ypos * 64)) as usize) % (64 * 32);
+                    // gfx[(x + xline + ((y + yline) * 64)) % (64 * 32)] ^= 1;
                     if self.graphics[pos] {
                         self.V[0xF as usize] = 1;
                     }
@@ -249,8 +260,15 @@ impl VirtualMachine {
         self.draw_to_screen = true;
     }
 
+    pub fn load_rom(& mut self, cart: Cartridge)
+    {
+        for i in 0..cart.size {
+            self.memory[(i+512) as usize] = cart.data[i as usize];
+        }
+    }
+
     #[allow(non_snake_case)]
-    fn run_cycle(&mut self) {
+    pub fn run_cycle(&mut self) {
         self.opcode = self.fetch_opcode();
         match self.opcode & 0xF000 {
             0x0000 => {
