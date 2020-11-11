@@ -67,6 +67,9 @@ impl Config {
 			return Err(Error::new(ErrorKind::Other, "invalid argument passed on to -s/--scale."));
 		}
 		let scale_factor = scale_factor.unwrap();
+		if scale_factor == 0 {
+			return Err(Error::new(ErrorKind::Other, "scale_factor must be bigger than zero."));
+		}
 
 		// let verbose = matches.
 

@@ -20,8 +20,8 @@ impl Cartridge {
         let mut file = File::open(filename).expect("File not found!");
         let mut buffer = [0_u8; MAX_ROM_SIZE as usize];
 
-        let dunno = file.metadata().unwrap().len();
-        if dunno > (MAX_ROM_SIZE as u64)  {
+        let file_size = file.metadata().unwrap().len();
+        if file_size > (MAX_ROM_SIZE as u64)  {
             return Err(Error::new(ErrorKind::Other, "The supplied ROM is too big."));
         }
     

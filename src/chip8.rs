@@ -23,6 +23,9 @@ const FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
+const SCREEN_WIDTH: usize  = 64;
+const SCREEN_HEIGHT: usize = 32;
+
 #[derive(PartialEq)]
 /// Used by comparison opcodes
 enum ComparisonType {
@@ -77,10 +80,11 @@ pub struct VirtualMachine {
     // The CHIP-8 has a 64 x 32 screen
     // The `graphics` array holds the state of every pixel
     // If true, the pixel is white.
-    graphics: [bool; 64 * 32],
+    // pub graphics: [u8; 64 * 32],
+    pub graphics: [[u8; SCREEN_WIDTH]; SCREEN_HEIGHT],
 
     // If true, the contents of `graphics` will be drawn to screen
-    draw_to_screen: bool,
+    pub draw_to_screen: bool,
 
     // The CHIP-8 supports 16 keys (hex-based)
     // `keypad` holds the current state of the keypad
@@ -117,7 +121,7 @@ impl VirtualMachine {
             // Fill the memory with zeroes
             memory: [0; 4096],
             // Clear display (all black)
-            graphics: [false; 64 * 32],
+            graphics: [[0; SCREEN_WIDTH]; SCREEN_HEIGHT],
             // Clear registers
             V: [0; 16],
             // There's nothing to draw to screen yet
@@ -145,7 +149,7 @@ impl VirtualMachine {
 
     /// Clears the CHIP-80 screen
     fn clear_screen(&mut self) {
-        self.graphics = [false; 64 * 32];
+        self.graphics = [[0; SCREEN_WIDTH]; SCREEN_HEIGHT];
         self.draw_to_screen = true;
     }
 
@@ -223,37 +227,26 @@ impl VirtualMachine {
         }
     }
 
+    #[allow(non_snake_case)]
     fn draw_sprite(&mut self) {
-        // let x_idx = (self.opcode & 0x0F00) >> 8;
-        // let y_idx = (self.opcode & 0x00F0) >> 4;
-        // let x = self.V[x_idx as usize];
-        // let y = self.V[y_idx as usize];
 
         // x := The contents of VX, where X is specified by the current opcode
         // y := The contents of VY, where Y is specified by the current opcode
         let ((_, x), (_, y)) = self.vx_vy();
-
-        // The height of the sprite
-        let height = self.opcode & 0x000F;
+        let n = (self.opcode & 0x000F) as u8;
 
         // Reset VF
         self.V[0xF as usize] = 0;
 
-        for yline in 0..height {
-            // Get the pixel vaue from the memory starting at I
-            let pixel = self.memory[(self.I + (yline as u16)) as usize];
-            // Loop over the 8 bits of the current row
-            for xline in 0..8 {
-                if pixel & (0x80 >> xline) != 0 {
-                    let xpos: u16 = (x + xline) as u16;
-                    let ypos: u16 = y as u16 + yline;
-                    // Doing the modulo by (64 * 32) in order to avoid overflow
-                    let pos = ((xpos + (ypos * 64)) as usize) % (64 * 32);
-                    if self.graphics[pos] {
-                        self.V[0xF as usize] = 1;
-                    }
-                    self.graphics[pos] = !self.graphics[pos];
-                }
+        for byte in 0..(n as usize) {
+            // Wrap around if overflown
+            let y = (self.V[y as usize] as usize + byte) % SCREEN_HEIGHT;
+            for bit in 0..8 {
+                let x = (self.V[x as usize] as usize + bit) % SCREEN_WIDTH;
+                let I = self.I as usize;
+                let color = (self.memory[I + byte] >> (7 - bit)) & 1;
+                self.V[0x0F] |= color & self.graphics[y][x];
+                self.graphics[y][x] ^= color;
             }
         }
 
@@ -356,7 +349,7 @@ impl VirtualMachine {
                 let mut NN = (self.opcode & 0x00FF) as u16;
                 NN = if NN + (VX as u16) > 255 {
                     // Wrap around if overflown
-                    0
+                    NN % 256
                 } else {
                     NN                    
                 };
